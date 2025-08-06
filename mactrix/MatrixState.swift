@@ -1,0 +1,295 @@
+//
+//  MatrixState.swift
+//  mactrix
+//
+//  Created by Annie Worrell on 8/6/25.
+//
+
+import SwiftUI
+import ArgumentParser
+import Foundation
+import KeychainAccess
+import MatrixRustSDK
+import Combine
+
+@Observable
+class MatrixState {
+
+    let applicationID = "dev.anniesden.mactrix"
+    let keychainSessionKey = "WalkthroughUser"
+
+    var cancellables: Set<AnyCancellable> = []
+
+    func logout() async throws {
+        syncService = nil
+        roomListService = nil
+        allRoomsListener.rooms = []
+        allRoomsListener = nil
+        roomListEntriesHandle = nil
+
+        timeline = nil
+        timelineItemsListener = nil
+        timelineHandle = nil
+
+        sendHandle = nil
+
+        try await client.logout()
+        client = nil
+    }
+
+    // MARK: - Step 1
+    // Authenticate the user.
+
+    var client: Client!
+
+    func step1Login(username: String, password: String) async throws -> WalkthroughUser {
+        let storeID = UUID().uuidString
+
+        print("Step 1: Login")
+
+        // Create a client for a particular homeserver.
+        // Note that we can pass a server name (the second part of a Matrix user ID) instead of the direct URL.
+        // This allows the SDK to discover the homeserver's well-known configuration for Sliding Sync support.
+        let client = try await ClientBuilder()
+            .serverNameOrHomeserverUrl(serverNameOrUrl: "matrix.org")
+            .sessionPaths(dataPath: URL.sessionData(for: storeID).path(percentEncoded: false),
+                          cachePath: URL.sessionCaches(for: storeID).path(percentEncoded: false))
+            .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
+            .build()
+        print("Created client")
+
+        // Login using password authentication.
+        print("Awaiting login...")
+        try await client.login(username: username, password: password, initialDeviceName: nil, deviceId: nil)
+        print("Logged in!")
+
+        self.client = client
+
+        print("\(client.homeserver())")
+
+        // This data should be stored securely in the keychain.
+        return try WalkthroughUser(session: client.session(), storeID: storeID)
+    }
+
+    // Or, if the user has previously authenticated we can restore their session instead.
+
+    func step1Restore(_ walkthroughUser: WalkthroughUser) async throws {
+        print("Step 1: Restore")
+
+        let session = walkthroughUser.session
+        let sessionID = walkthroughUser.storeID
+
+        // Build a client for the homeserver.
+        print("Creating client...")
+        let client = try await ClientBuilder()
+            .sessionPaths(dataPath: URL.sessionData(for: sessionID).path(percentEncoded: false),
+                          cachePath: URL.sessionCaches(for: sessionID).path(percentEncoded: false))
+            .homeserverUrl(url: session.homeserverUrl)
+            .build()
+        print("Created client")
+
+        // Restore the client using the session.
+        print("Restoring session...")
+        try await client.restoreSession(session: session)
+        print("Logged in!")
+
+        print("\(client.homeserver())")
+
+        self.client = client
+    }
+
+    // MARK: - Step 2
+    // Build the room list.
+
+    @Observable
+    class AllRoomsListener: RoomListEntriesListener {
+        /// The user's list of rooms.
+        var rooms: [Room] = []
+
+        func onUpdate(roomEntriesUpdate: [RoomListEntriesUpdate]) {
+            // Update the user's room list on each update.
+            for update in roomEntriesUpdate {
+                switch update {
+                case .append(let values):
+                    rooms.append(contentsOf: values)
+                case .clear:
+                    rooms.removeAll()
+                case .pushFront(let room):
+                    rooms.insert(room, at: 0)
+                case .pushBack(let room):
+                    rooms.append(room)
+                case .popFront:
+                    rooms.removeFirst()
+                case .popBack:
+                    rooms.removeLast()
+                case .insert(let index, let room):
+                    rooms.insert(room, at: Int(index))
+                case .set(let index, let room):
+                    rooms[Int(index)] = room
+                case .remove(let index):
+                    rooms.remove(at: Int(index))
+                case .truncate(let length):
+                    rooms.removeSubrange(Int(length)..<rooms.count)
+                case .reset(values: let values):
+                    rooms = values
+                }
+            }
+        }
+    }
+
+    var syncService: SyncService!
+    var roomListService: RoomListService!
+    var allRoomsListener: AllRoomsListener!
+    var roomListEntriesHandle: RoomListEntriesWithDynamicAdaptersResult!
+
+    func step2StartSync() async throws {
+        print("Step 2: Start Sync")
+
+        // Create a sync service which controls the sync loop.
+        print("Starting sync service...")
+        syncService = try await client.syncService().finish()
+        print("Sync service started!")
+
+        // Listen to room list updates.
+        print("Listen to room list updates")
+        allRoomsListener = AllRoomsListener()
+        roomListService = syncService.roomListService()
+        roomListEntriesHandle = try await roomListService.allRooms().entriesWithDynamicAdapters(pageSize: 100, listener: allRoomsListener)
+        _ = roomListEntriesHandle.controller().setFilter(kind: .all(filters: []))
+
+        // Start the sync loop.
+        print("Starting the sync loop")
+        await syncService.start()
+    }
+
+    // MARK: - Step 3
+    // Create a timeline.
+
+    class TimelineItemListener: TimelineListener {
+        /// The loaded items for this room's timeline
+        var timelineItems: [TimelineItem] = []
+
+        func onUpdate(diff: [TimelineDiff]) {
+            // Update the timeline items on each update.
+            for update in diff {
+                switch update {
+                case .append(let values):
+                    timelineItems.append(contentsOf: values)
+                case .clear:
+                    timelineItems.removeAll()
+                case .pushFront(let room):
+                    timelineItems.insert(room, at: 0)
+                case .pushBack(let room):
+                    timelineItems.append(room)
+                case .popFront:
+                    timelineItems.removeFirst()
+                case .popBack:
+                    timelineItems.removeLast()
+                case .insert(let index, let room):
+                    timelineItems.insert(room, at: Int(index))
+                case .set(let index, let room):
+                    timelineItems[Int(index)] = room
+                case .remove(let index):
+                    timelineItems.remove(at: Int(index))
+                case .truncate(let length):
+                    timelineItems.removeSubrange(Int(length)..<timelineItems.count)
+                case .reset(values: let values):
+                    timelineItems = values
+                }
+            }
+        }
+    }
+
+    var timeline: Timeline!
+    var timelineItemsListener: TimelineItemListener!
+    var timelineHandle: TaskHandle!
+
+    func step3LoadRoomTimeline(roomID: String) async throws {
+        print("Step 3: Load Room Timeline")
+
+        // Wait for the rooms array to contain the desired room…
+        print("Waiting for desired room...")
+        while !allRoomsListener.rooms.contains(where: { $0.id() == roomID }) {
+            try await Task.sleep(for: .milliseconds(250))
+        }
+
+        // Fetch the room from the listener and initialise its timeline.
+        print("Waiting for room's timeline...")
+        let room = allRoomsListener.rooms.first { $0.id() == roomID }!
+        timeline = try await room.timeline()
+
+        // Listen to timeline item updates.
+        print("Listening for timeline item updates...")
+        timelineItemsListener = TimelineItemListener()
+        timelineHandle = await timeline.addListener(listener: timelineItemsListener)
+
+        // Wait for the items array to be updated…
+        print("Waiting for items array to be updated...")
+        while timelineItemsListener.timelineItems.isEmpty {
+            try await Task.sleep(for: .milliseconds(250))
+        }
+
+        // Get the event contents from an item.
+        print("Printing messages!")
+        let timelineItem = timelineItemsListener.timelineItems.last!
+        if case let .msgLike(content: messageEvent) = timelineItem.asEvent()?.content,
+           case let .message(content: messageContent) = messageEvent.kind {
+            print(messageContent.body)
+        }
+    }
+
+    // MARK: - Step 4
+    // Sending events.
+
+    var sendHandle: SendHandle?
+
+    func step4SendMessage() async throws {
+        // Create the message content from a markdown string.
+        let message = messageEventContentFromMarkdown(md: "Hello, World!")
+
+        // Send the message content via the room's timeline (so that we show a local echo).
+        sendHandle = try await timeline.send(msg: message)
+    }
+}
+
+
+extension Client: @retroactive Equatable {}
+extension Client: @retroactive Hashable {
+    public func hash(into hasher: inout Hasher) {
+        do {
+            hasher.combine(try self.userId())
+        } catch {
+            print("Error hashing client: \(error)")
+        }
+    }
+    public static func == (lhs: Client, rhs: Client) -> Bool {
+        do {
+            let lhsId = try lhs.userId()
+            let rhsId = try rhs.userId()
+            return lhsId == rhsId
+        } catch {
+            print("Error checking equality of two clients: \(error)")
+        }
+        return false;
+    }
+}
+
+extension RoomInfo: @retroactive Equatable {}
+extension RoomInfo: @retroactive Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    public static func == (lhs: RoomInfo, rhs: RoomInfo) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+extension Room: @retroactive Equatable {}
+extension Room: @retroactive Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id())
+    }
+    public static func == (lhs: Room, rhs: Room) -> Bool {
+        lhs.id() == rhs.id()
+    }
+}
