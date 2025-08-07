@@ -19,8 +19,12 @@ struct MessageView: View {
         if case let .msgLike(content: messageEvent) = timelineItem.content,
            case let .message(content: messageContent) = messageEvent.kind {
             VStack(alignment: .leading) {
-                Text(timelineItem.sender)
-                    .fontWeight(.bold)
+                let messageDate: Date = Date(timeIntervalSince1970: TimeInterval(timelineItem.timestamp / 1000))
+                HStack {
+                    Text("**\(timelineItem.sender)**")
+                    Spacer()
+                    Text("\(messageDate.formatted(date: .abbreviated, time: .shortened))")
+                }
                 if case let .file(content: fileContent) = messageContent.msgType {
                     Text("FILE: \(fileContent.filename)")
                 }

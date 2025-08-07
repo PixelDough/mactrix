@@ -22,10 +22,11 @@ struct RoomView: View {
       .publisher(for: .scrollToBottomTriggered)
       .receive(on: RunLoop.main)
 
+    @State private var timelineItems: [EventTimelineItem] = []
+
     var body: some View {
         VStack(spacing: 0) {
-            if let room, let timelineItemsListener = matrixState.timelineItemsListener {
-                let timelineItems = timelineItemsListener.timelineItems.compactMap({$0.asEvent()})
+            if let room {
                 ScrollViewReader { proxy in
                     List {
                         ForEach(timelineItems.enumerated(), id: \.offset) { index, timelineItem in
@@ -33,6 +34,10 @@ struct RoomView: View {
                                 .id(timelineItem.eventOrTransactionId)
                                 .tag(timelineItem.eventOrTransactionId)
                         }
+                    }
+                    .defaultScrollAnchor(.bottom)
+                    .onAppear() {
+                        proxy.scrollTo(timelineItems.last?.eventOrTransactionId)
                     }
                     .onChange(of: message, initial: true) {
                         proxy.scrollTo(timelineItems.last?.eventOrTransactionId)
@@ -83,7 +88,8 @@ struct RoomView: View {
             do {
                 try await matrixState.step3LoadRoomTimeline(roomID: roomInfo.id)
 
-
+                guard let timelineItemsListener = matrixState.timelineItemsListener else { return }
+                timelineItems = timelineItemsListener.timelineItems.compactMap({$0.asEvent()})
             } catch {
                 print("Error loading room timeline: \(error)")
             }
