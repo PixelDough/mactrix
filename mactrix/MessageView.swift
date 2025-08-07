@@ -21,10 +21,28 @@ struct MessageView: View {
             VStack(alignment: .leading) {
                 let messageDate: Date = Date(timeIntervalSince1970: TimeInterval(timelineItem.timestamp / 1000))
                 HStack {
-                    Text("**\(timelineItem.sender)**")
-                    Spacer()
-                    Text("\(messageDate.formatted(date: .abbreviated, time: .shortened))")
+                    if case let .ready(displayName: displayName, displayNameAmbiguous: displayNameAmbiguous, avatarUrl: avatarUrl) = timelineItem.senderProfile {
+                        MxcAsyncImage(mxcUrl: avatarUrl ?? "") { image in
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .clipShape(
+                                    Circle()
+                                )
+                        } placeholder: {
+                            ProgressView()
+                                .controlSize(.mini)
+                        }
+                        if let displayName {
+                            Text("**\(displayName)** (\(timelineItem.sender))")
+                        } else {
+                            Text("**\(timelineItem.sender)**")
+                        }
+                        Spacer()
+                        Text("\(messageDate.formatted(date: .abbreviated, time: .shortened))")
+                    }
                 }
+                .frame(height: 30)
                 if case let .file(content: fileContent) = messageContent.msgType {
                     Text("FILE: \(fileContent.filename)")
                 }
@@ -53,6 +71,13 @@ struct MessageView: View {
                             .redacted(reason: .placeholder)
                     }
                     .frame(maxHeight: 300)
+                    .contextMenu {
+                        Button {
+
+                        } label: {
+                            Label("Save Image", systemImage: "square.and.arrow.down")
+                        }
+                    }
                 }
                 if case let .text(content: textContent) = messageContent.msgType {
                     Text(textContent.body)

@@ -29,36 +29,40 @@ struct RoomView: View {
     var body: some View {
         VStack(spacing: 0) {
             if let room {
-                ScrollViewReader { proxy in
-                    List {
-                        Button {
-                            Task {
-                                do {
-                                    earlierEventsExist = try await !matrixState.timeline.paginateBackwards(numEvents: 50)
-                                    print("Load earlier: \(earlierEventsExist)")
-                                } catch {
-                                    print("Error paginating backwards: \(error)")
+                ScrollView {
+                    ScrollViewReader { proxy in
+                        LazyVStack {
+                            Button {
+                                Task {
+                                    do {
+                                        earlierEventsExist = try await !matrixState.timeline.paginateBackwards(numEvents: 50)
+                                        print("Load earlier: \(earlierEventsExist)")
+                                    } catch {
+                                        print("Error paginating backwards: \(error)")
+                                    }
                                 }
+                            } label: {
+                                Text("Load Earlier")
+                                    .frame(maxWidth: .infinity)
                             }
-                        } label: {
-                            Text("Load Earlier")
-                                .frame(maxWidth: .infinity)
+                            .buttonStyle(.glass)
+                            .disabled(!earlierEventsExist)
+                            ForEach(timelineItems.enumerated(), id: \.offset) { index, timelineItem in
+                                MessageView(timelineItem: timelineItem)
+                                Divider()
+                            }
+                            Divider()
+                                .frame(height: 0)
+                                .hidden()
+                                .id("BOTTOM_DIVIDER")
                         }
-                        .buttonStyle(.glass)
-                        .disabled(!earlierEventsExist)
-                        ForEach(timelineItems.enumerated(), id: \.offset) { index, timelineItem in
-                            MessageView(timelineItem: timelineItem)
+                        .onChange(of: message, initial: true) {
+                            proxy.scrollTo("BOTTOM_DIVIDER")
                         }
-                        Divider()
-                            .frame(height: 0)
-                            .hidden()
-                            .id("BOTTOM_DIVIDER")
-                    }
-                    .onChange(of: message, initial: true) {
-                        proxy.scrollTo("BOTTOM_DIVIDER")
-                    }
-                    .onReceive(scrollToBottomNotification) { notification in
-                        proxy.scrollTo("BOTTOM_DIVIDER")
+                        .onReceive(scrollToBottomNotification) { notification in
+                            proxy.scrollTo("BOTTOM_DIVIDER")
+                        }
+                        .padding()
                     }
                 }
 
