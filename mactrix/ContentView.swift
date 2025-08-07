@@ -140,6 +140,7 @@ struct ContentView: View {
             }
             .padding()
             .presentationCompactAdaptation(.fullScreenCover)
+            .presentationPreventsAppTermination(false)
         }
         .sheet(isPresented: $showVerificationSheet) {
             VerificationView()
