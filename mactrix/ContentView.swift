@@ -23,6 +23,8 @@ struct ContentView: View {
 
     @State var avatarUrl: String?
 
+    @State var showVerificationSheet: Bool = false
+
     enum MenuState {
         case home
         case account
@@ -83,6 +85,19 @@ struct ContentView: View {
                     Button {
                         Task {
                             do {
+                                showVerificationSheet = true
+                                try await matrixState.verificationStep()
+                            } catch {
+                                print("Error verifying device: \(error)")
+                            }
+                        }
+                    } label: {
+                        Label("Verify Device", systemImage: "lock")
+                    }
+                    .disabled(matrixState.client.encryption().verificationState() == .verified)
+                    Button {
+                        Task {
+                            do {
                                 if let walkthroughUser = try loadUserFromKeychain() {
                                     try? FileManager.default.removeItem(at: .sessionData(for: walkthroughUser.storeID))
                                     try? FileManager.default.removeItem(at: .sessionCaches(for: walkthroughUser.storeID))
@@ -125,7 +140,109 @@ struct ContentView: View {
             }
             .padding()
         }
+        .sheet(isPresented: $showVerificationSheet) {
+            VStack(spacing: 0) {
+                VStack {
+                    Text("Verification")
+                        .font(.title)
+                        .padding(.bottom)
+                        .frame(maxWidth: .infinity)
+
+                    Spacer()
+                    switch matrixState.verificationDelegate?.flowState {
+                    case .verificationRequested:
+                        Text("Waiting on approval from another device to continue")
+                    case .verificationRequestAccepted:
+                        Text("Verification request accepted")
+                    case .receivedVerificationRequest:
+                        Text("Received verification request")
+                    case .sasVerificationStarted:
+                        Text("Started SAS verification")
+                    case .receivedVerificationData:
+                        if let verificationData = matrixState.verificationDelegate?.sessionVerificationData {
+                            switch verificationData {
+                            case .emojis(let emojis, _):
+                                Text("Make sure the emojis shown on the other device match this order exactly.")
+
+                                VStack(alignment: .leading) {
+                                    ForEach(emojis.enumerated(), id: \.offset) { index, emoji in
+                                        Label{
+                                            Text(emoji.description())
+                                        } icon: {
+                                            Text(emoji.symbol())
+                                        }
+                                        .font(.title)
+                                    }
+                                }
+                                .padding()
+                            case .decimals(let values):
+                                Text(values.map(\.description).joined(separator: ", "))
+                            }
+                        }
+                    case .failed:
+                        Text("Verification failed. Please try again.")
+                    case .cancelled:
+                        Text("Verification cancelled.")
+                    case .finished:
+                        Text("Verification successful!")
+                    case nil:
+                        EmptyView()
+                    }
+
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+
+                Divider()
+                    .frame(height: 1)
+
+                HStack(alignment: .center) {
+                    Spacer()
+
+                    let flowState = matrixState.verificationDelegate?.flowState ?? .verificationRequested
+
+                    if flowState == .cancelled || flowState == .failed || flowState == .finished {
+                        Button {
+                            showVerificationSheet = false
+                        } label: {
+                            Label("Close", systemImage: "xmark")
+                                .labelStyle(.titleOnly)
+                        }
+                    } else {
+                        Button {
+                            showVerificationSheet = false
+                            Task {
+                                try await matrixState.sessionVerificationController?.cancelVerification()
+                            }
+                        } label: {
+                            Label("Cancel", systemImage: "xmark")
+                                .labelStyle(.titleOnly)
+                        }
+
+                        if flowState == .receivedVerificationData {
+                            Button {
+                                Task {
+                                    try await matrixState.sessionVerificationController?.approveVerification()
+                                }
+                            } label: {
+                                Label("Confirm", systemImage: "check")
+                                    .labelStyle(.titleOnly)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.accentColor)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .presentationSizing(.form)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+//            .frame(minWidth: 600, idealWidth: 600, minHeight: 400, idealHeight: 400)
+        }
         .task {
+            // Log in if keychain exists
             if matrixState.client != nil { return }
             do {
                 guard let walkthroughUser = try loadUserFromKeychain() else { return }
@@ -136,6 +253,7 @@ struct ContentView: View {
             }
         }
         .task(id: selectedRoomId) {
+            // Load room from selected room id
             do {
                 currentRoom = nil
                 if let selectedRoomId {

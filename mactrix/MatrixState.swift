@@ -67,8 +67,10 @@ class MatrixState {
 
         print("\(client.homeserver())")
 
+        let session = try client.session()
+
         // This data should be stored securely in the keychain.
-        return try WalkthroughUser(session: client.session(), storeID: storeID)
+        return WalkthroughUser(session: session, storeID: storeID)
     }
 
     // Or, if the user has previously authenticated we can restore their session instead.
@@ -145,6 +147,12 @@ class MatrixState {
     func step2StartSync() async throws {
         print("Step 2: Start Sync")
 
+        print("Getting verification controller...")
+        let newVerificationController = try await client.getSessionVerificationController()
+        verificationDelegate = VerificationDelegate()
+        newVerificationController.setDelegate(delegate: verificationDelegate)
+        sessionVerificationController = newVerificationController
+
         // Create a sync service which controls the sync loop.
         print("Starting sync service...")
         syncService = try await client.syncService().finish()
@@ -160,6 +168,114 @@ class MatrixState {
         // Start the sync loop.
         print("Starting the sync loop")
         await syncService.start()
+    }
+
+    // MARK: - Step 2.5
+    // Verification State
+
+    @Observable
+    class VerificationListener: VerificationStateListener {
+        func onUpdate(status: MatrixRustSDK.VerificationState) {
+            switch status {
+            case .unknown:
+                print(status)
+            case .unverified:
+                print(status)
+            case .verified:
+                print(status)
+            }
+        }
+    }
+
+    @Observable
+    class VerificationDelegate: SessionVerificationControllerDelegate {
+        enum VerificationFlowState {
+            case verificationRequested
+            case verificationRequestAccepted
+            case receivedVerificationRequest
+            case sasVerificationStarted
+            case receivedVerificationData
+            case failed
+            case cancelled
+            case finished
+        }
+        var sessionVerificationData: SessionVerificationData?
+        var flowState: VerificationFlowState = .verificationRequested
+        func didReceiveVerificationRequest(details: MatrixRustSDK.SessionVerificationRequestDetails) {
+            print("Received Verification Request: \(details)")
+            flowState = .receivedVerificationRequest
+        }
+
+        func didAcceptVerificationRequest() {
+            print("Accepted Verification Request")
+            flowState = .verificationRequestAccepted
+        }
+
+        func didStartSasVerification() {
+            print("Started SAS Verification")
+            flowState = .sasVerificationStarted
+        }
+
+        func didReceiveVerificationData(data: MatrixRustSDK.SessionVerificationData) {
+            print("Received Verification Data: \(data)")
+
+            flowState = .receivedVerificationData
+            sessionVerificationData = data
+
+            switch data {
+            case .emojis(let emojis, let indices):
+                print("Emojis: \(emojis.map({$0.description()}))")
+                print("Indices: \(indices)")
+            case .decimals(let values):
+                print("Decimals: \(values)")
+            }
+        }
+
+        func didFail() {
+            print("Failed Verification!")
+
+            sessionVerificationData = nil
+            flowState = .failed
+        }
+
+        func didCancel() {
+            print("Canceled Verification!")
+
+            sessionVerificationData = nil
+            flowState = .cancelled
+        }
+
+        func didFinish() {
+            print("Finished Verification!")
+
+            sessionVerificationData = nil
+            flowState = .finished
+        }
+    }
+
+    var sessionVerificationController: SessionVerificationController?
+    var verificationDelegate: VerificationDelegate?
+
+    func verificationStep() async throws {
+        print("Verification Step")
+
+        verificationDelegate?.flowState = .verificationRequested
+
+        let encryption = client.encryption()
+        print("Encryption verification state: \(encryption.verificationState())")
+
+        if encryption.verificationState() != .verified, let sessionVerificationController {
+            print("Requesting device verification...")
+            try await sessionVerificationController.requestDeviceVerification()
+            print("Device verification requested!")
+        }
+
+        print("Wait for E2EE Initialization Tasks...")
+        await encryption.waitForE2eeInitializationTasks()
+//        var verificationListener: VerificationListener = VerificationListener()
+//        encryption.verificationStateListener(listener: verificationListener)
+//        try await verificationController.startSasVerification()
+//        print("Sas Verification Started")
     }
 
     // MARK: - Step 3
@@ -231,10 +347,11 @@ class MatrixState {
 
         // Get the event contents from an item.
         print("Printing messages!")
-        let timelineItem = timelineItemsListener.timelineItems.last!
-        if case let .msgLike(content: messageEvent) = timelineItem.asEvent()?.content,
-           case let .message(content: messageContent) = messageEvent.kind {
-            print(messageContent.body)
+        for timelineItem in timelineItemsListener.timelineItems {
+            if case let .msgLike(content: messageEvent) = timelineItem.asEvent()?.content,
+               case let .message(content: messageContent) = messageEvent.kind {
+                print(messageContent.body)
+            }
         }
     }
 
@@ -291,5 +408,15 @@ extension Room: @retroactive Hashable {
     }
     public static func == (lhs: Room, rhs: Room) -> Bool {
         lhs.id() == rhs.id()
+    }
+}
+
+extension SessionVerificationEmoji: @retroactive Equatable {}
+extension SessionVerificationEmoji: @retroactive Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(description())
+    }
+    public static func == (lhs: SessionVerificationEmoji, rhs: SessionVerificationEmoji) -> Bool {
+        lhs.description() == rhs.description()
     }
 }
