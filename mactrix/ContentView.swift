@@ -94,7 +94,7 @@ struct ContentView: View {
                     } label: {
                         Label("Verify Device", systemImage: "lock")
                     }
-                    .disabled(matrixState.client.encryption().verificationState() == .verified)
+                    .disabled(matrixState.client?.encryption().verificationState() == .verified)
                     Button {
                         Task {
                             do {
@@ -139,9 +139,11 @@ struct ContentView: View {
                 .disabled(matrixState.client != nil)
             }
             .padding()
+            .presentationCompactAdaptation(.fullScreenCover)
         }
         .sheet(isPresented: $showVerificationSheet) {
             VerificationView()
+                .presentationCompactAdaptation(.fullScreenCover)
         }
         .task {
             // Log in if keychain exists

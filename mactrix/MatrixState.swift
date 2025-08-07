@@ -21,20 +21,27 @@ class MatrixState {
     var cancellables: Set<AnyCancellable> = []
 
     func logout() async throws {
-        syncService = nil
-        roomListService = nil
-        allRoomsListener.rooms = []
-        allRoomsListener = nil
-        roomListEntriesHandle = nil
+        defer {
+            client = nil
 
-        timeline = nil
-        timelineItemsListener = nil
-        timelineHandle = nil
+            syncService = nil
+            roomListService = nil
+            allRoomsListener.rooms = []
+            allRoomsListener = nil
+            roomListEntriesHandle = nil
 
-        sendHandle = nil
+            timeline = nil
+            timelineItemsListener = nil
+            timelineHandle = nil
 
-        try await client.logout()
-        client = nil
+            sendHandle = nil
+        }
+
+        do {
+            try await client.logout()
+        } catch {
+            print("Error calling client.logout(): \(error)")
+        }
     }
 
     // MARK: - Step 1
@@ -97,6 +104,8 @@ class MatrixState {
 
         print("\(client.homeserver())")
 
+        await client.encryption().waitForE2eeInitializationTasks()
+
         self.client = client
     }
 
@@ -146,12 +155,6 @@ class MatrixState {
 
     func step2StartSync() async throws {
         print("Step 2: Start Sync")
-
-        print("Getting verification controller...")
-        let newVerificationController = try await client.getSessionVerificationController()
-        verificationDelegate = VerificationDelegate()
-        newVerificationController.setDelegate(delegate: verificationDelegate)
-        sessionVerificationController = newVerificationController
 
         // Create a sync service which controls the sync loop.
         print("Starting sync service...")
@@ -259,6 +262,16 @@ class MatrixState {
     func verificationStep() async throws {
         print("Verification Step")
 
+        if sessionVerificationController == nil {
+            print("Getting verification controller...")
+            let newVerificationController = try await client.getSessionVerificationController()
+            sessionVerificationController = newVerificationController
+        }
+        if let sessionVerificationController, verificationDelegate == nil {
+            verificationDelegate = VerificationDelegate()
+            sessionVerificationController.setDelegate(delegate: verificationDelegate)
+        }
+
         verificationDelegate?.flowState = .verificationRequested
 
         let encryption = client.encryption()
@@ -281,6 +294,7 @@ class MatrixState {
     // MARK: - Step 3
     // Create a timeline.
 
+    @Observable
     class TimelineItemListener: TimelineListener {
         /// The loaded items for this room's timeline
         var timelineItems: [TimelineItem] = []
@@ -333,6 +347,7 @@ class MatrixState {
         print("Waiting for room's timeline...")
         let room = allRoomsListener.rooms.first { $0.id() == roomID }!
         timeline = try await room.timeline()
+        try await timeline.paginateBackwards(numEvents: 100)
 
         // Listen to timeline item updates.
         print("Listening for timeline item updates...")
@@ -343,15 +358,6 @@ class MatrixState {
         print("Waiting for items array to be updated...")
         while timelineItemsListener.timelineItems.isEmpty {
             try await Task.sleep(for: .milliseconds(250))
-        }
-
-        // Get the event contents from an item.
-        print("Printing messages!")
-        for timelineItem in timelineItemsListener.timelineItems {
-            if case let .msgLike(content: messageEvent) = timelineItem.asEvent()?.content,
-               case let .message(content: messageContent) = messageEvent.kind {
-                print(messageContent.body)
-            }
         }
     }
 
