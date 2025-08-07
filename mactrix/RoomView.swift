@@ -7,6 +7,7 @@
 
 import SwiftUI
 import MatrixRustSDK
+import Combine
 
 struct RoomView: View {
     @Environment(MatrixState.self) private var matrixState: MatrixState
@@ -17,6 +18,10 @@ struct RoomView: View {
 
     @State private var message: String = ""
 
+    let scrollToBottomNotification = NotificationCenter.default
+      .publisher(for: .scrollToBottomTriggered)
+      .receive(on: RunLoop.main)
+
     var body: some View {
         VStack(spacing: 0) {
             if let room, let timelineItemsListener = matrixState.timelineItemsListener {
@@ -26,9 +31,13 @@ struct RoomView: View {
                         ForEach(timelineItems.enumerated(), id: \.offset) { index, timelineItem in
                             MessageView(timelineItem: timelineItem)
                                 .id(timelineItem.eventOrTransactionId)
+                                .tag(timelineItem.eventOrTransactionId)
                         }
                     }
-                    .onChange(of: roomInfo.id, initial: true) {
+                    .onChange(of: message, initial: true) {
+                        proxy.scrollTo(timelineItems.last?.eventOrTransactionId)
+                    }
+                    .onReceive(scrollToBottomNotification) { notification in
                         proxy.scrollTo(timelineItems.last?.eventOrTransactionId)
                     }
                 }
@@ -73,6 +82,8 @@ struct RoomView: View {
         .task(id: roomInfo.id) {
             do {
                 try await matrixState.step3LoadRoomTimeline(roomID: roomInfo.id)
+
+
             } catch {
                 print("Error loading room timeline: \(error)")
             }

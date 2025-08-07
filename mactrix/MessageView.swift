@@ -32,14 +32,23 @@ struct MessageView: View {
                     MxcAsyncImage(mxcUrl: imageContent.source.toJson()) { image in
                         image
                             .resizable()
-                            .scaledToFit()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 300, height: (CGFloat(imageContent.info!.height!) / CGFloat(imageContent.info!.width!)) * 300)
                             .clipShape(
                                 RoundedRectangle(cornerRadius: 10)
                             )
                     } placeholder: {
-                        ProgressView()
+                        Rectangle()
+                            .fill(.thinMaterial)
+                            .frame(width: CGFloat(imageContent.info!.width!), height: CGFloat(imageContent.info!.height!))
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 300, height: (CGFloat(imageContent.info!.height!) / CGFloat(imageContent.info!.width!)) * 300)
+                            .clipShape(
+                                RoundedRectangle(cornerRadius: 10)
+                            )
+                            .redacted(reason: .placeholder)
                     }
-                    .frame(maxHeight: 100)
+                    .frame(maxHeight: 300)
                 }
                 if case let .text(content: textContent) = messageContent.msgType {
                     Text(textContent.body)

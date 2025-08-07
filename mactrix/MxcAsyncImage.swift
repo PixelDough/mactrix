@@ -10,7 +10,8 @@ import MatrixRustSDK
 
 struct MxcAsyncImage<Content: View, Placeholder: View> : View {
     @Environment(MatrixState.self) private var matrixState: MatrixState
-    var mxcUrl: String = ""
+    var mxcUrl: String
+    @State var cachedUrl: String = ""
     @State var content: (Image) -> Content
     @State var placeholder: () -> Placeholder
 
@@ -33,6 +34,7 @@ struct MxcAsyncImage<Content: View, Placeholder: View> : View {
     }
 
     func loadData() async {
+        if cachedUrl == mxcUrl { return }
         do {
             errored = false
             let mediaSource = mxcUrl.hasPrefix("mxc://") ? try MediaSource.fromUrl(url: mxcUrl) : try MediaSource.fromJson(json: mxcUrl)
@@ -45,6 +47,7 @@ struct MxcAsyncImage<Content: View, Placeholder: View> : View {
                 errored = true
             }
             loaded = true
+            cachedUrl = mxcUrl
         } catch {
             print("Failed to load image from \(mxcUrl): \(error)")
             errored = true

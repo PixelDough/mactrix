@@ -347,7 +347,7 @@ class MatrixState {
         print("Waiting for room's timeline...")
         let room = allRoomsListener.rooms.first { $0.id() == roomID }!
         timeline = try await room.timeline()
-        try await timeline.paginateBackwards(numEvents: 100)
+        try await timeline.paginateBackwards(numEvents: 50)
 
         // Listen to timeline item updates.
         print("Listening for timeline item updates...")
