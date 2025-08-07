@@ -8,10 +8,12 @@
 import SwiftUI
 import MatrixRustSDK
 
-struct MxcAsyncImage<Content: View, Placeholder: View> : View {
+private struct MxcAsyncImageBody<Content: View, Placeholder: View> : View {
     @Environment(MatrixState.self) private var matrixState: MatrixState
-    var mxcUrl: String
+
     @State var cachedUrl: String = ""
+    @Binding var mxcUrl: String
+
     @State var content: (Image) -> Content
     @State var placeholder: () -> Placeholder
 
@@ -20,21 +22,26 @@ struct MxcAsyncImage<Content: View, Placeholder: View> : View {
     @State var errored: Bool = false
 
     var body: some View {
-        if errored {
-            content(Image(systemName: "exclamationmark.octagon"))
-        } else if loaded, let image {
-            content(image)
-        } else {
-            placeholder()
-                .task(id: mxcUrl) {
-                    if mxcUrl.isEmpty { return }
-                    await loadData()
-                }
+        Group {
+            if errored {
+                content(Image(systemName: "exclamationmark.octagon"))
+            } else if loaded, let image {
+                content(image)
+            } else {
+                placeholder()
+            }
+        }
+        .task(id: mxcUrl) {
+            if cachedUrl == mxcUrl { return }
+            if mxcUrl.isEmpty { return }
+            errored = false
+            loaded = false
+            image = nil
+            await loadData()
         }
     }
 
     func loadData() async {
-        if cachedUrl == mxcUrl { return }
         do {
             errored = false
             let mediaSource = mxcUrl.hasPrefix("mxc://") ? try MediaSource.fromUrl(url: mxcUrl) : try MediaSource.fromJson(json: mxcUrl)
@@ -52,6 +59,17 @@ struct MxcAsyncImage<Content: View, Placeholder: View> : View {
             print("Failed to load image from \(mxcUrl): \(error)")
             errored = true
         }
+    }
+}
+
+struct MxcAsyncImage<Content: View, Placeholder: View> : View {
+    @Environment(MatrixState.self) private var matrixState: MatrixState
+    var mxcUrl: String?
+    @State var content: (Image) -> Content
+    @State var placeholder: () -> Placeholder
+
+    var body: some View {
+        MxcAsyncImageBody(mxcUrl: .constant(mxcUrl ?? ""), content: content, placeholder: placeholder)
     }
 }
 

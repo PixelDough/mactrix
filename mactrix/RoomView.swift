@@ -26,69 +26,42 @@ struct RoomView: View {
 
     @State private var timelineItems: [EventTimelineItem] = []
 
+    @State private var scrollPositionID: EventOrTransactionId?
+
     var body: some View {
-        VStack(spacing: 0) {
+        ScrollView {
             if let room {
-                ScrollView {
-                    ScrollViewReader { proxy in
-                        LazyVStack {
-                            Button {
-                                Task {
-                                    do {
-                                        earlierEventsExist = try await !matrixState.timeline.paginateBackwards(numEvents: 50)
-                                        print("Load earlier: \(earlierEventsExist)")
-                                    } catch {
-                                        print("Error paginating backwards: \(error)")
-                                    }
+                ScrollViewReader { proxy in
+                    LazyVStack(pinnedViews: .sectionFooters) {
+                        Button {
+                            Task {
+                                do {
+                                    earlierEventsExist = try await !matrixState.timeline.paginateBackwards(numEvents: 50)
+                                    print("Load earlier: \(earlierEventsExist)")
+                                } catch {
+                                    print("Error paginating backwards: \(error)")
                                 }
-                            } label: {
-                                Text("Load Earlier")
-                                    .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.glass)
-                            .disabled(!earlierEventsExist)
-                            ForEach(timelineItems.enumerated(), id: \.offset) { index, timelineItem in
-                                MessageView(timelineItem: timelineItem)
-                                Divider()
-                            }
-                            Divider()
-                                .frame(height: 0)
-                                .hidden()
-                                .id("BOTTOM_DIVIDER")
+                        } label: {
+                            Text("Load Earlier")
+                                .frame(maxWidth: .infinity)
                         }
-                        .onChange(of: message, initial: true) {
-                            proxy.scrollTo("BOTTOM_DIVIDER")
+                        .buttonStyle(.bordered)
+                        .disabled(!earlierEventsExist)
+                        ForEach(timelineItems.enumerated(), id: \.offset) { index, timelineItem in
+                            MessageView(timelineItem: timelineItem)
+                                .id(timelineItem.eventOrTransactionId)
+                                .tag(timelineItem.eventOrTransactionId)
                         }
-                        .onReceive(scrollToBottomNotification) { notification in
-                            proxy.scrollTo("BOTTOM_DIVIDER")
-                        }
-                        .padding()
+                    }
+                    .onChange(of: message, initial: true) {
+                        proxy.scrollTo(timelineItems.last?.eventOrTransactionId)
+                    }
+                    .onReceive(scrollToBottomNotification) { notification in
+                        proxy.scrollTo(timelineItems.last?.eventOrTransactionId)
                     }
                 }
-
-                Spacer()
-
-                Divider()
-
-                HStack {
-                    TextField("", text: $message, prompt: Text("Message"))
-                        .frame(maxWidth: .infinity)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit {
-                            sendMessage()
-                        }
-                    Button {
-                        sendMessage()
-                    } label: {
-                        Label("Send", systemImage: "paperplane.fill")
-                    }
-                    .disabled(matrixState.sendHandle != nil)
-                    .disabled(message.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                    .submitLabel(.send)
-                }
-                .padding()
+                .scrollTargetLayout()
             } else {
                 ProgressView("Loading Room")
                     .task(id: roomInfo) {
@@ -100,10 +73,14 @@ struct RoomView: View {
                     }
             }
         }
+        .scrollPosition(id: $scrollPositionID)
+        .onAppear{ scrollPositionID = timelineItems.first?.eventOrTransactionId }
+        .defaultScrollAnchor(.bottom, for: .alignment)
         .onChange(of: roomInfo.id, initial: true) { oldValue, newValue in
             roomName = newValue
             earlierEventsExist = true
-            matrixState.timelineItemsListener?.timelineItems.removeAll()
+            scrollPositionID = nil
+//            matrixState.timelineItemsListener?.timelineItems.removeAll()
         }
         .task(id: roomInfo.id) {
             do {
@@ -115,7 +92,38 @@ struct RoomView: View {
         .onChange(of: matrixState.timelineItemsListener?.timelineItems) {
             timelineItems = matrixState.timelineItemsListener?.timelineItems.compactMap({$0.asEvent()}) ?? []
         }
+        .contentMargins(.horizontal, 20, for: .scrollContent)
         .frame(minWidth: 400)
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                TextField("", text: $message, prompt: Text("Message"))
+                    .frame(maxWidth: .infinity)
+                    .textFieldStyle(.plain)
+                    .onSubmit {
+                        sendMessage()
+                    }
+                    .padding(4)
+                    .glassEffect(.regular.interactive(), in: .capsule.inset(by: -4))
+                Button {
+                    sendMessage()
+                } label: {
+                    Label("Send", systemImage: "paperplane.fill")
+                        .padding(4)
+                }
+                .disabled(matrixState.sendHandle != nil)
+                .disabled(message.trimmingCharacters(in: .whitespaces).isEmpty)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .buttonSizing(.fitted)
+                .glassEffect(.regular.interactive(), in: .circle.inset(by: -4))
+                .submitLabel(.send)
+            }
+            .padding()
+//            .background {
+//                LinearGradient(colors: [Color.clear, Color.black], startPoint: .top, endPoint: .bottom)
+//                    .glassEffect()
+//            }
+        }
     }
 
     func sendMessage() {

@@ -120,6 +120,7 @@ struct ContentView: View {
         } detail: {
 
         }
+        .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: Binding.constant(matrixState.client == nil)) {
             Form {
                 TextField("Username", text: $username)

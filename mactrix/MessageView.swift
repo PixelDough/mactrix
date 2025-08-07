@@ -12,86 +12,90 @@ struct MessageView: View {
     @Environment(MatrixState.self) private var matrixState: MatrixState
     var timelineItem: EventTimelineItem
 
-    var body: some View {
-        if case let .failedToParseMessageLike(eventType: eventType, error: error) = timelineItem.content {
-            Text("Failed to parse message like event: \(eventType), \(error)")
-        }
-        if case let .msgLike(content: messageEvent) = timelineItem.content,
-           case let .message(content: messageContent) = messageEvent.kind {
-            VStack(alignment: .leading) {
-                let messageDate: Date = Date(timeIntervalSince1970: TimeInterval(timelineItem.timestamp / 1000))
-                HStack {
-                    if case let .ready(displayName: displayName, displayNameAmbiguous: displayNameAmbiguous, avatarUrl: avatarUrl) = timelineItem.senderProfile {
-                        MxcAsyncImage(mxcUrl: avatarUrl ?? "") { image in
-                            image
-                                .resizable()
-                                .scaledToFit()
-                                .clipShape(
-                                    Circle()
-                                )
-                        } placeholder: {
-                            ProgressView()
-                                .controlSize(.mini)
-                        }
-                        if let displayName {
-                            Text("**\(displayName)** (\(timelineItem.sender))")
-                        } else {
-                            Text("**\(timelineItem.sender)**")
-                        }
-                        Spacer()
-                        Text("\(messageDate.formatted(date: .abbreviated, time: .shortened))")
-                    }
-                }
-                .frame(height: 30)
-                if case let .file(content: fileContent) = messageContent.msgType {
-                    Text("FILE: \(fileContent.filename)")
-                }
-                if case let .gallery(content: galleryContent) = messageContent.msgType {
-                    Text("gallery: \(galleryContent.itemtypes.count)")
-                }
-                if case let .image(content: imageContent) = messageContent.msgType {
-                    Text("Image: \(imageContent.filename)")
-                    MxcAsyncImage(mxcUrl: imageContent.source.toJson()) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 300, height: (CGFloat(imageContent.info!.height!) / CGFloat(imageContent.info!.width!)) * 300)
-                            .clipShape(
-                                RoundedRectangle(cornerRadius: 10)
-                            )
-                    } placeholder: {
-                        Rectangle()
-                            .fill(.thinMaterial)
-                            .frame(width: CGFloat(imageContent.info!.width!), height: CGFloat(imageContent.info!.height!))
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 300, height: (CGFloat(imageContent.info!.height!) / CGFloat(imageContent.info!.width!)) * 300)
-                            .clipShape(
-                                RoundedRectangle(cornerRadius: 10)
-                            )
-                            .redacted(reason: .placeholder)
-                    }
-                    .frame(maxHeight: 300)
-                    .contextMenu {
-                        Button {
+    @State var displayName: String? = nil
+    @State var displayNameAmbiguous: Bool = false
+    @State var avatarUrl: String? = nil
 
-                        } label: {
-                            Label("Save Image", systemImage: "square.and.arrow.down")
-                        }
-                    }
+    var body: some View {
+        let messageDate: Date = Date(timeIntervalSince1970: TimeInterval(timelineItem.timestamp / 1000))
+        let shields = timelineItem.lazyProvider.getShields(strict: false)
+
+        VStack {
+            switch timelineItem.content {
+            case .state(stateKey: let stateKey, content: let content):
+                TimelineEventState(timelineItem: timelineItem, stateKey: stateKey, content: content)
+            case .failedToParseState(eventType: let eventType, stateKey: let stateKey, error: let error):
+                TimelineEventBasic(timelineItem: timelineItem, text: "Failed to parse state event: \(eventType), key: \(stateKey), \(error)")
+            case .msgLike(content: let messageEvent):
+                TimelineEventMessageLike(timelineItem: timelineItem, messageEvent: messageEvent)
+            case .failedToParseMessageLike(eventType: let eventType, error: let error):
+                TimelineEventBasic(timelineItem: timelineItem, text: "Failed to parse message-like event: \(eventType), \(error)")
+            case .profileChange(displayName: let newDisplayName, prevDisplayName: let prevDisplayName, avatarUrl: let newAvatarUrl, prevAvatarUrl: let prevAvatarUrl):
+                if let newDisplayName, newDisplayName != prevDisplayName {
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(prevDisplayName ?? displayName ?? timelineItem.sender) changed their display name to \(newDisplayName)")
                 }
-                if case let .text(content: textContent) = messageContent.msgType {
-                    Text(textContent.body)
+                if let newAvatarUrl, newAvatarUrl != prevAvatarUrl {
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(newDisplayName ?? displayName ?? timelineItem.sender) changed their avatar")
                 }
+            case .roomMembership(userId: let userId, userDisplayName: let userDisplayName, change: let change, reason: let reason):
+                let reason: String = (reason != nil) ? " (\(reason ?? ""))" : ""
+                let userDisplayName: String = userDisplayName ?? userId
+                switch change {
+                case .error:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Error changing room membership for \(userDisplayName)\(reason).")
+                case .joined:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(userDisplayName) joined\(reason).")
+                case .left:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(userDisplayName) left\(reason).")
+                case .banned:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Banned \(userDisplayName)\(reason).")
+                case .unbanned:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Unbanned \(userDisplayName)\(reason).")
+                case .kicked:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Kicked \(userDisplayName)\(reason).")
+                case .invited:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Invited \(userDisplayName)\(reason).")
+                case .kickedAndBanned:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Kicked and banned \(userDisplayName)\(reason).")
+                case .invitationAccepted:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(userDisplayName) accepted invite\(reason).")
+                case .invitationRejected:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(userDisplayName) rejected invite\(reason).")
+                case .invitationRevoked:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(userDisplayName) revoked invitation\(reason).")
+                case .knocked:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(userDisplayName) knocked\(reason).")
+                case .knockAccepted:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(userDisplayName) accepted knock\(reason).")
+                case .knockRetracted:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(userDisplayName) retracted knock\(reason).")
+                case .knockDenied:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(userDisplayName) denied knock\(reason).")
+                case .notImplemented:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Event not implemented\(reason).")
+                default:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Unhandeled event type.")
+                }
+            default:
+                TimelineEventBasic(timelineItem: timelineItem, text: "Unknown Event Content")
             }
         }
-        if case let .profileChange(displayName: displayName, prevDisplayName: prevDisplayName, avatarUrl: avatarUrl, prevAvatarUrl: prevAvatarUrl) = timelineItem.content {
-            if let displayName, displayName != prevDisplayName {
-                Text("\(timelineItem.sender) changed their display name to \(displayName)")
-                    .fontWeight(.bold)
-            }
-            if let avatarUrl, avatarUrl != prevAvatarUrl {
-                Text("\(timelineItem.sender) changed their avatar")
-                    .fontWeight(.bold)
+        .padding()
+        .background() {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.ultraThickMaterial)
+                .shadow(radius: 16)
+        }
+        .onChange(of: timelineItem.senderProfile, initial: true) { oldValue, newValue in
+            switch newValue {
+            case let .ready(displayName: displayName, displayNameAmbiguous: displayNameAmbiguous, avatarUrl: avatarUrl):
+                self.displayName = displayName
+                self.displayNameAmbiguous = displayNameAmbiguous
+                self.avatarUrl = avatarUrl
+            case .pending, .error, .unavailable:
+                self.displayName = nil
+                self.displayNameAmbiguous = true
+                self.avatarUrl = nil
             }
         }
     }

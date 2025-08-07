@@ -1,0 +1,95 @@
+//
+//  TimelineEventMessageLike.swift
+//  mactrix
+//
+//  Created by Annie Worrell on 8/7/25.
+//
+
+import SwiftUI
+import MatrixRustSDK
+
+struct TimelineEventMessageLike: View {
+    @State var timelineItem: EventTimelineItem
+    @State var messageEvent: MsgLikeContent
+
+    @State var displayName: String? = nil
+    @State var displayNameAmbiguous: Bool = false
+    @State var avatarUrl: String? = nil
+    
+    var body: some View {
+        Group {
+            switch messageEvent.kind {
+            case .message(content: let messageContent):
+                VStack(alignment: .leading) {
+                    HStack(alignment: .center) {
+                        TimelineUser(timelineItem: timelineItem)
+                        Spacer()
+                        TimelineTimestamp(timelineItem: timelineItem)
+                        ShieldsButton(shieldState: timelineItem.lazyProvider.getShields(strict: false))
+                    }
+                    if case let .file(content: fileContent) = messageContent.msgType {
+                        Text("FILE: \(fileContent.filename)")
+                    }
+                    if case let .gallery(content: galleryContent) = messageContent.msgType {
+                        Text("gallery: \(galleryContent.itemtypes.count)")
+                    }
+                    if case let .image(content: imageContent) = messageContent.msgType {
+                        Text("Image: \(imageContent.filename)")
+                        MxcAsyncImage(mxcUrl: imageContent.source.toJson()) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .clipShape(
+                                    RoundedRectangle(cornerRadius: 10)
+                                )
+                        } placeholder: {
+                            Rectangle()
+                                .fill(.thinMaterial)
+                                .aspectRatio(contentMode: .fit)
+                                .clipShape(
+                                    RoundedRectangle(cornerRadius: 10)
+                                )
+                                .redacted(reason: .placeholder)
+                        }
+                        .frame(maxHeight: 300)
+                        .contextMenu {
+                            Button {
+
+                            } label: {
+                                Label("Save Image", systemImage: "square.and.arrow.down")
+                            }
+                        }
+                    }
+                    if case let .text(content: textContent) = messageContent.msgType {
+                        Text(textContent.body)
+                    }
+                }
+            case .redacted:
+                TimelineEventBasic(timelineItem: timelineItem, text: "\(displayName ?? timelineItem.sender) redacted a message.")
+            case .unableToDecrypt(msg: let encryptedMessage):
+                switch encryptedMessage {
+                case .olmV1Curve25519AesSha2(let senderKey):
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Unable to decrypt message (olmV1Curve25519AesSha2)")
+                case .megolmV1AesSha2(let sessionId, let cause):
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Unable to decrypt message (megolmV1AesSha2).")
+                case .unknown:
+                    TimelineEventBasic(timelineItem: timelineItem, text: "Unable to decrypt message (unknown).")
+                }
+            default:
+                TimelineEventBasic(timelineItem: timelineItem, text: "Unhandeled message event type.")
+            }
+        }
+        .onChange(of: timelineItem.senderProfile, initial: true) { oldValue, newValue in
+            switch newValue {
+            case let .ready(displayName: displayName, displayNameAmbiguous: displayNameAmbiguous, avatarUrl: avatarUrl):
+                self.displayName = displayName
+                self.displayNameAmbiguous = displayNameAmbiguous
+                self.avatarUrl = avatarUrl
+            case .pending, .error, .unavailable:
+                self.displayName = nil
+                self.displayNameAmbiguous = true
+                self.avatarUrl = nil
+            }
+        }
+    }
+}
