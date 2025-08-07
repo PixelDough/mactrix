@@ -21,7 +21,14 @@ struct MessageView: View {
             VStack(alignment: .leading) {
                 Text(timelineItem.sender)
                     .fontWeight(.bold)
+                if case let .file(content: fileContent) = messageContent.msgType {
+                    Text("FILE: \(fileContent.filename)")
+                }
+                if case let .gallery(content: galleryContent) = messageContent.msgType {
+                    Text("gallery: \(galleryContent.itemtypes.count)")
+                }
                 if case let .image(content: imageContent) = messageContent.msgType {
+                    Text("Image: \(imageContent.filename)")
                     MxcAsyncImage(mxcUrl: imageContent.source.toJson()) { image in
                         image
                             .resizable()
