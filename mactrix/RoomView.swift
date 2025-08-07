@@ -18,6 +18,8 @@ struct RoomView: View {
 
     @State private var message: String = ""
 
+    @State private var earlierEventsExist: Bool = true
+
     let scrollToBottomNotification = NotificationCenter.default
       .publisher(for: .scrollToBottomTriggered)
       .receive(on: RunLoop.main)
@@ -29,21 +31,34 @@ struct RoomView: View {
             if let room {
                 ScrollViewReader { proxy in
                     List {
+                        Button {
+                            Task {
+                                do {
+                                    earlierEventsExist = try await !matrixState.timeline.paginateBackwards(numEvents: 50)
+                                    print("Load earlier: \(earlierEventsExist)")
+                                } catch {
+                                    print("Error paginating backwards: \(error)")
+                                }
+                            }
+                        } label: {
+                            Text("Load Earlier")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.glass)
+                        .disabled(!earlierEventsExist)
                         ForEach(timelineItems.enumerated(), id: \.offset) { index, timelineItem in
                             MessageView(timelineItem: timelineItem)
-                                .id(timelineItem.eventOrTransactionId)
-                                .tag(timelineItem.eventOrTransactionId)
                         }
-                    }
-                    .defaultScrollAnchor(.bottom)
-                    .onAppear() {
-                        proxy.scrollTo(timelineItems.last?.eventOrTransactionId)
+                        Divider()
+                            .frame(height: 0)
+                            .hidden()
+                            .id("BOTTOM_DIVIDER")
                     }
                     .onChange(of: message, initial: true) {
-                        proxy.scrollTo(timelineItems.last?.eventOrTransactionId)
+                        proxy.scrollTo("BOTTOM_DIVIDER")
                     }
                     .onReceive(scrollToBottomNotification) { notification in
-                        proxy.scrollTo(timelineItems.last?.eventOrTransactionId)
+                        proxy.scrollTo("BOTTOM_DIVIDER")
                     }
                 }
 
@@ -83,16 +98,18 @@ struct RoomView: View {
         }
         .onChange(of: roomInfo.id, initial: true) { oldValue, newValue in
             roomName = newValue
+            earlierEventsExist = true
+            matrixState.timelineItemsListener?.timelineItems.removeAll()
         }
         .task(id: roomInfo.id) {
             do {
                 try await matrixState.step3LoadRoomTimeline(roomID: roomInfo.id)
-
-                guard let timelineItemsListener = matrixState.timelineItemsListener else { return }
-                timelineItems = timelineItemsListener.timelineItems.compactMap({$0.asEvent()})
             } catch {
                 print("Error loading room timeline: \(error)")
             }
+        }
+        .onChange(of: matrixState.timelineItemsListener?.timelineItems) {
+            timelineItems = matrixState.timelineItemsListener?.timelineItems.compactMap({$0.asEvent()}) ?? []
         }
         .frame(minWidth: 400)
     }
