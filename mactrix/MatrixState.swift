@@ -62,7 +62,9 @@ class MatrixState {
             .sessionPaths(dataPath: URL.sessionData(for: storeID).path(percentEncoded: false),
                           cachePath: URL.sessionCaches(for: storeID).path(percentEncoded: false))
             .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
+            .autoEnableBackups(autoEnableBackups: true)
             .decryptionSettings(decryptionSettings: .init(senderDeviceTrustRequirement: .untrusted))
+            .backupDownloadStrategy(backupDownloadStrategy: .afterDecryptionFailure)
             .build()
         print("Created client")
 
@@ -95,9 +97,12 @@ class MatrixState {
             .sessionPaths(dataPath: URL.sessionData(for: sessionID).path(percentEncoded: false),
                           cachePath: URL.sessionCaches(for: sessionID).path(percentEncoded: false))
             .homeserverUrl(url: session.homeserverUrl)
+            .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
             .autoEnableBackups(autoEnableBackups: true)
+            .decryptionSettings(decryptionSettings: .init(senderDeviceTrustRequirement: .untrusted))
             .backupDownloadStrategy(backupDownloadStrategy: .afterDecryptionFailure)
             .build()
+
         print("Created client")
         print("Cache directory: \(URL.sessionCaches(for: sessionID).path(percentEncoded: false))")
 
