@@ -55,7 +55,7 @@ struct TimelineEventMessageLike: View {
                         if case let .image(content: imageContent) = messageContent.msgType {
                             Text("Image: \(imageContent.filename)")
                                 .font(.subheadline)
-                            MxcAsyncImage(mxcUrl: imageContent.source.toJson()) { image in
+                            MxcAsyncImageSavable(mxcUrl: imageContent.source.toJson()) { image in
                                 image
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
@@ -72,13 +72,6 @@ struct TimelineEventMessageLike: View {
                                     .redacted(reason: .placeholder)
                             }
                             .frame(maxHeight: 300)
-                            .contextMenu {
-                                Button {
-
-                                } label: {
-                                    Label("Save Image", systemImage: "square.and.arrow.down")
-                                }
-                            }
                         }
                         if case let .text(content: textContent) = messageContent.msgType {
                             Text(textContent.body)

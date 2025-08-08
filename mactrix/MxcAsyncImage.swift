@@ -14,12 +14,12 @@ private struct MxcAsyncImageBody<Content: View, Placeholder: View> : View {
     @State var cachedUrl: String = ""
     @Binding var mxcUrl: String
 
-    @State var content: (Image) -> Content
-    @State var placeholder: () -> Placeholder
+    @ViewBuilder var content: (Image) -> Content
+    @ViewBuilder var placeholder: () -> Placeholder
 
-    @State var loaded: Bool = false
-    @State var image: Image? = nil
-    @State var errored: Bool = false
+    @State private var loaded: Bool = false
+    @State private var image: Image? = nil
+    @State private var errored: Bool = false
 
     var body: some View {
         Group {
@@ -34,30 +34,27 @@ private struct MxcAsyncImageBody<Content: View, Placeholder: View> : View {
         .task(id: mxcUrl) {
             if cachedUrl == mxcUrl { return }
             if mxcUrl.isEmpty { return }
-            errored = false
-            loaded = false
-            image = nil
             await loadData()
         }
     }
 
     func loadData() async {
-        do {
-            errored = false
-            let mediaSource = mxcUrl.hasPrefix("mxc://") ? try MediaSource.fromUrl(url: mxcUrl) : try MediaSource.fromJson(json: mxcUrl)
-            let media = try await matrixState.client.getMediaContent(mediaSource: mediaSource)
+        errored = false
+        loaded = false
+        image = nil
 
-            if let newImage = Image(data: media) {
-                image = newImage
-            } else {
-                print("Couldn't load image from url: \(mxcUrl)... \(media)")
-                errored = true
-            }
-            loaded = true
-            cachedUrl = mxcUrl
+        do {
+            image = try await matrixState.loadImageData(urlOrJson: mxcUrl)
         } catch {
-            print("Failed to load image from \(mxcUrl): \(error)")
             errored = true
+            print("Error fetching image in MxcAsyncImageBody: \(error)")
+        }
+
+        if image == nil {
+            print("Couldn't load image from url: \(mxcUrl)")
+        } else {
+            cachedUrl = mxcUrl
+            loaded = true
         }
     }
 }
@@ -65,8 +62,8 @@ private struct MxcAsyncImageBody<Content: View, Placeholder: View> : View {
 struct MxcAsyncImage<Content: View, Placeholder: View> : View {
     @Environment(MatrixState.self) private var matrixState: MatrixState
     var mxcUrl: String?
-    @State var content: (Image) -> Content
-    @State var placeholder: () -> Placeholder
+    @ViewBuilder var content: (Image) -> Content
+    @ViewBuilder var placeholder: () -> Placeholder
 
     var body: some View {
         MxcAsyncImageBody(mxcUrl: .constant(mxcUrl ?? ""), content: content, placeholder: placeholder)

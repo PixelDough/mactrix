@@ -384,6 +384,21 @@ class MatrixState {
         // Send the message content via the room's timeline (so that we show a local echo).
         sendHandle = try await timeline.send(msg: message)
     }
+
+    // MARK: - Helper Functions
+    func loadImageData(urlOrJson: String) async throws -> Image? {
+        var image: Image? = nil
+        let mediaSource = urlOrJson.hasPrefix("mxc://") ? try MediaSource.fromUrl(url: urlOrJson) : try MediaSource.fromJson(json: urlOrJson)
+        let media = try await client.getMediaContent(mediaSource: mediaSource)
+
+        if let newImage = Image(data: media) {
+            image = newImage
+        } else {
+            print("Couldn't load image from url: \(urlOrJson)... \(media)")
+        }
+
+        return image
+    }
 }
 
 extension Client: @retroactive ObservableObject {}
