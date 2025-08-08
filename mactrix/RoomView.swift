@@ -76,13 +76,12 @@ struct RoomView: View {
         .scrollPosition(id: $scrollPositionID)
         .onAppear{ scrollPositionID = timelineItems.first?.eventOrTransactionId }
         .defaultScrollAnchor(.bottom, for: .alignment)
-        .onChange(of: roomInfo.id, initial: true) { oldValue, newValue in
-            roomName = newValue
+        .task(id: roomInfo.id) {
+            roomName = roomInfo.id
             earlierEventsExist = true
             scrollPositionID = nil
 //            matrixState.timelineItemsListener?.timelineItems.removeAll()
-        }
-        .task(id: roomInfo.id) {
+
             do {
                 try await matrixState.step3LoadRoomTimeline(roomID: roomInfo.id)
             } catch {

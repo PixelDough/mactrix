@@ -9,7 +9,7 @@ import SwiftUI
 import MatrixRustSDK
 
 struct TimelineEventState: View {
-    @State var timelineItem: EventTimelineItem
+    var timelineItem: EventTimelineItem
     @State var stateKey: String
     @State var content: OtherState
 
@@ -20,6 +20,10 @@ struct TimelineEventState: View {
     var body: some View {
         Group {
             switch content {
+            case .roomCreate:
+                TimelineEventBasic(timelineItem: timelineItem, text: "\(displayName) created the room.")
+            case .roomEncryption:
+                TimelineEventBasic(timelineItem: timelineItem, text: "\(displayName) changed the room encryption state.")
             case .roomName(name: let roomName):
                 if let roomName {
                     TimelineEventBasic(timelineItem: timelineItem, text: "\(displayName) changed the room name to \(roomName).")

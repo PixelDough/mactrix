@@ -80,11 +80,10 @@ struct MessageView: View {
                 TimelineEventBasic(timelineItem: timelineItem, text: "Unknown Event Content")
             }
         }
-        .padding()
+        .padding(10)
         .background() {
             RoundedRectangle(cornerRadius: 10)
                 .fill(.ultraThickMaterial)
-                .shadow(radius: 16)
         }
         .onChange(of: timelineItem.senderProfile, initial: true) { oldValue, newValue in
             switch newValue {

@@ -62,6 +62,7 @@ class MatrixState {
             .sessionPaths(dataPath: URL.sessionData(for: storeID).path(percentEncoded: false),
                           cachePath: URL.sessionCaches(for: storeID).path(percentEncoded: false))
             .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
+            .decryptionSettings(decryptionSettings: .init(senderDeviceTrustRequirement: .untrusted))
             .build()
         print("Created client")
 
@@ -94,8 +95,11 @@ class MatrixState {
             .sessionPaths(dataPath: URL.sessionData(for: sessionID).path(percentEncoded: false),
                           cachePath: URL.sessionCaches(for: sessionID).path(percentEncoded: false))
             .homeserverUrl(url: session.homeserverUrl)
+            .autoEnableBackups(autoEnableBackups: true)
+            .backupDownloadStrategy(backupDownloadStrategy: .afterDecryptionFailure)
             .build()
         print("Created client")
+        print("Cache directory: \(URL.sessionCaches(for: sessionID).path(percentEncoded: false))")
 
         // Restore the client using the session.
         print("Restoring session...")
@@ -104,7 +108,7 @@ class MatrixState {
 
         print("\(client.homeserver())")
 
-        await client.encryption().waitForE2eeInitializationTasks()
+//        await client.encryption().waitForE2eeInitializationTasks()
 
         self.client = client
     }
@@ -285,10 +289,9 @@ class MatrixState {
 
         print("Wait for E2EE Initialization Tasks...")
         await encryption.waitForE2eeInitializationTasks()
-//        var verificationListener: VerificationListener = VerificationListener()
-//        encryption.verificationStateListener(listener: verificationListener)
-//        try await verificationController.startSasVerification()
-//        print("Sas Verification Started")
+
+        var verificationListener: VerificationListener = VerificationListener()
+        encryption.verificationStateListener(listener: verificationListener)
     }
 
     // MARK: - Step 3
@@ -348,7 +351,9 @@ class MatrixState {
         let room = allRoomsListener.rooms.first { $0.id() == roomID }!
         timeline = try await room.timeline()
 
-        try await timeline.paginateBackwards(numEvents: 50)
+//        await client.encryption().waitForE2eeInitializationTasks()
+
+//        try await timeline.paginateBackwards(numEvents: 50)
 
         // Listen to timeline item updates.
         print("Listening for timeline item updates...")
@@ -376,7 +381,7 @@ class MatrixState {
     }
 }
 
-
+extension Client: @retroactive ObservableObject {}
 extension Client: @retroactive Equatable {}
 extension Client: @retroactive Hashable {
     public func hash(into hasher: inout Hasher) {

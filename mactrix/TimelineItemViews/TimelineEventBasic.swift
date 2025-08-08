@@ -9,17 +9,20 @@ import SwiftUI
 import MatrixRustSDK
 
 struct TimelineEventBasic: View {
-    @State var timelineItem: EventTimelineItem
+    var timelineItem: EventTimelineItem
     @State var text: String
     var body: some View {
-        HStack {
+        HStack(alignment: .top) {
             Text(text)
+                .layoutPriority(1)
 
             Spacer()
                 .frame(minWidth: 4)
 
             TimelineTimestamp(timelineItem: timelineItem)
+                .layoutPriority(1)
             ShieldsButton(shieldState: timelineItem.lazyProvider.getShields(strict: false))
+                .layoutPriority(1)
         }
     }
 }

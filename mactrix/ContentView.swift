@@ -95,6 +95,9 @@ struct ContentView: View {
                         Label("Verify Device", systemImage: "lock")
                     }
                     .disabled(matrixState.client?.encryption().verificationState() == .verified)
+                    .onAppear() {
+                        print("Verification state: \(matrixState.client?.encryption().verificationState())")
+                    }
                     Button {
                         Task {
                             do {

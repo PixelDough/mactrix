@@ -9,7 +9,7 @@ import SwiftUI
 import MatrixRustSDK
 
 struct TimelineTimestamp: View {
-    @State var timelineItem: EventTimelineItem
+    var timelineItem: EventTimelineItem
 
     @State private var date: Date = .now
 
