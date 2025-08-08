@@ -32,11 +32,14 @@ struct MessageView: View {
             case .failedToParseMessageLike(eventType: let eventType, error: let error):
                 TimelineEventBasic(timelineItem: timelineItem, text: "Failed to parse message-like event: \(eventType), \(error)")
             case .profileChange(displayName: let newDisplayName, prevDisplayName: let prevDisplayName, avatarUrl: let newAvatarUrl, prevAvatarUrl: let prevAvatarUrl):
-                if let newDisplayName, newDisplayName != prevDisplayName {
+                if let newDisplayName {
                     TimelineEventBasic(timelineItem: timelineItem, text: "\(prevDisplayName ?? displayName) changed their display name to \(newDisplayName)")
                 }
-                if let newAvatarUrl, newAvatarUrl != prevAvatarUrl {
+                if let newAvatarUrl {
                     TimelineEventBasic(timelineItem: timelineItem, text: "\(newDisplayName ?? displayName) changed their avatar")
+                }
+                if newDisplayName == nil && newAvatarUrl == nil {
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(displayName) experienced an unhandled profile change.")
                 }
             case .roomMembership(userId: let userId, userDisplayName: let userDisplayName, change: let change, reason: let reason):
                 let reason: String = (reason != nil) ? " (\(reason ?? ""))" : ""
