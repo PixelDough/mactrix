@@ -19,6 +19,7 @@ struct MessageView: View {
     var body: some View {
         let messageDate: Date = Date(timeIntervalSince1970: TimeInterval(timelineItem.timestamp / 1000))
         let shields = timelineItem.lazyProvider.getShields(strict: false)
+        let displayName = displayName ?? timelineItem.sender
 
         VStack {
             switch timelineItem.content {
@@ -32,10 +33,10 @@ struct MessageView: View {
                 TimelineEventBasic(timelineItem: timelineItem, text: "Failed to parse message-like event: \(eventType), \(error)")
             case .profileChange(displayName: let newDisplayName, prevDisplayName: let prevDisplayName, avatarUrl: let newAvatarUrl, prevAvatarUrl: let prevAvatarUrl):
                 if let newDisplayName, newDisplayName != prevDisplayName {
-                    TimelineEventBasic(timelineItem: timelineItem, text: "\(prevDisplayName ?? displayName ?? timelineItem.sender) changed their display name to \(newDisplayName)")
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(prevDisplayName ?? displayName) changed their display name to \(newDisplayName)")
                 }
                 if let newAvatarUrl, newAvatarUrl != prevAvatarUrl {
-                    TimelineEventBasic(timelineItem: timelineItem, text: "\(newDisplayName ?? displayName ?? timelineItem.sender) changed their avatar")
+                    TimelineEventBasic(timelineItem: timelineItem, text: "\(newDisplayName ?? displayName) changed their avatar")
                 }
             case .roomMembership(userId: let userId, userDisplayName: let userDisplayName, change: let change, reason: let reason):
                 let reason: String = (reason != nil) ? " (\(reason ?? ""))" : ""
@@ -76,8 +77,10 @@ struct MessageView: View {
                 default:
                     TimelineEventBasic(timelineItem: timelineItem, text: "Unhandeled event type.")
                 }
-            default:
-                TimelineEventBasic(timelineItem: timelineItem, text: "Unknown Event Content")
+            case .callInvite:
+                TimelineEventBasic(timelineItem: timelineItem, text: "\(displayName) started a call.")
+            case .callNotify:
+                TimelineEventBasic(timelineItem: timelineItem, text: "\(displayName) started a call.")
             }
         }
         .padding(10)

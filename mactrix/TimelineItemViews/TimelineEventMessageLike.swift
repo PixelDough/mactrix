@@ -54,6 +54,7 @@ struct TimelineEventMessageLike: View {
                         }
                         if case let .image(content: imageContent) = messageContent.msgType {
                             Text("Image: \(imageContent.filename)")
+                                .font(.subheadline)
                             MxcAsyncImage(mxcUrl: imageContent.source.toJson()) { image in
                                 image
                                     .resizable()
