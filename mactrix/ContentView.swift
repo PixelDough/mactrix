@@ -24,6 +24,7 @@ struct ContentView: View {
     @State var avatarUrl: String?
 
     @State var showVerificationSheet: Bool = false
+    @State var showDetailPanel: Bool = false
 
     enum MenuState {
         case home
@@ -121,7 +122,11 @@ struct ContentView: View {
         } content: {
 
         } detail: {
+            VStack {
 
+            }
+            .animation(.linear, value: showDetailPanel)
+            .navigationSplitViewColumnWidth(showDetailPanel ? 300 : 0)
         }
         .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: Binding.constant(matrixState.client == nil)) {
@@ -144,11 +149,25 @@ struct ContentView: View {
             }
             .padding()
             .presentationCompactAdaptation(.fullScreenCover)
+#if os(macOS)
             .presentationPreventsAppTermination(false)
+#endif
         }
         .sheet(isPresented: $showVerificationSheet) {
             VerificationView()
                 .presentationCompactAdaptation(.fullScreenCover)
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    withAnimation {
+                        showDetailPanel.toggle()
+                    }
+                } label: {
+                    Label("Show Details", systemImage: "sidebar.right")
+                }
+                .help(showDetailPanel ? "Hide Details" : "Show Details")
+           }
         }
         .task {
             // Log in if keychain exists
