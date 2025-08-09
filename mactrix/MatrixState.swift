@@ -399,7 +399,24 @@ class MatrixState {
 
         return image
     }
+
+    func getMediaData(urlOrJson: String) async throws -> Data? {
+        let mediaSource = urlOrJson.hasPrefix("mxc://") ? try MediaSource.fromUrl(url: urlOrJson) : try MediaSource.fromJson(json: urlOrJson)
+        let data: Data = try await client.getMediaContent(mediaSource: mediaSource)
+
+        return data
+    }
+
+    func getMediaFile(urlOrJson: String, filename: String? = nil, mimeType: String, useCache: Bool = true, tempDir: String? = nil) async throws -> MediaFileHandle {
+        let mediaSource = urlOrJson.hasPrefix("mxc://") ? try MediaSource.fromUrl(url: urlOrJson) : try MediaSource.fromJson(json: urlOrJson)
+        let fileHandle = try await client.getMediaFile(mediaSource: mediaSource, filename: filename, mimeType: mimeType, useCache: useCache, tempDir: tempDir)
+        let path = try fileHandle.path()
+        print("Got media file: \(path)")
+        return fileHandle
+    }
 }
+
+// MARK: - Extensions
 
 extension Client: @retroactive ObservableObject {}
 extension Client: @retroactive Equatable {}

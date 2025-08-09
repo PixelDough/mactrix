@@ -7,15 +7,20 @@
 
 import SwiftUI
 import MatrixRustSDK
+import AVKit
 
 struct TimelineEventMessageLike: View {
+    @Environment(MatrixState.self) private var matrixState: MatrixState
     var timelineItem: EventTimelineItem
     @State var messageEvent: MsgLikeContent
 
-    @State var displayName: String? = nil
-    @State var displayNameAmbiguous: Bool = false
-    @State var avatarUrl: String? = nil
-    
+    @State private var displayName: String? = nil
+    @State private var displayNameAmbiguous: Bool = false
+    @State private var avatarUrl: String? = nil
+
+    @State private var mediaFileHandle: MediaFileHandle? = nil
+    @State private var videoPlayer: AVPlayer = AVPlayer()
+
     var body: some View {
         Group {
             switch messageEvent.kind {
@@ -46,16 +51,13 @@ struct TimelineEventMessageLike: View {
                             ShieldsButton(shieldState: timelineItem.lazyProvider.getShields(strict: false))
                                 .layoutPriority(1)
                         }
-                        if case let .file(content: fileContent) = messageContent.msgType {
-                            Text("FILE: \(fileContent.filename)")
-                        }
-                        if case let .gallery(content: galleryContent) = messageContent.msgType {
-                            Text("gallery: \(galleryContent.itemtypes.count)")
-                        }
-                        if case let .image(content: imageContent) = messageContent.msgType {
-                            Text("Image: \(imageContent.filename)")
+                        switch messageContent.msgType {
+                        case .emote(let content):
+                            Text("emote: \(content.body)")
+                        case .image(let content):
+                            Text("Image: \(content.filename)")
                                 .font(.subheadline)
-                            MxcAsyncImageSavable(mxcUrl: imageContent.source.toJson()) { image in
+                            MxcAsyncImageSavable(mxcUrl: content.source.toJson()) { image in
                                 image
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
@@ -72,9 +74,41 @@ struct TimelineEventMessageLike: View {
                                     .redacted(reason: .placeholder)
                             }
                             .frame(maxHeight: 300)
-                        }
-                        if case let .text(content: textContent) = messageContent.msgType {
-                            Text(textContent.body)
+                        case .audio(let content):
+                            Text("audio: \(content.filename)")
+                        case .video(let content):
+                            Text("video: \(content.filename)")
+                            VideoPlayer(player: videoPlayer)
+                                .clipShape(
+                                    RoundedRectangle(cornerRadius: 10)
+                                )
+                                .frame(width: 300, height: 300)
+                                .task(id: content.info?.blurhash ?? "") {
+                                    do {
+                                        mediaFileHandle = try await matrixState.getMediaFile(urlOrJson: content.source.toJson(), filename: content.filename, mimeType: "video/mp4", useCache: true)
+                                        guard let mediaFileHandle else { return }
+                                        let url: URL = URL(fileURLWithPath: try mediaFileHandle.path())
+
+                                        videoPlayer.replaceCurrentItem(with: AVPlayerItem(url: url))
+                                    } catch {
+                                        print("Error loading video: \(error)")
+                                    }
+                                }
+                                .onDisappear {
+                                    videoPlayer.pause()
+                                }
+                        case .file(let content):
+                            Text("file: \(content.filename)")
+                        case .gallery(let content):
+                            Text("gallery: \(content.itemtypes.count)")
+                        case .notice(let content):
+                            Text("notice: \(content.body)")
+                        case .text(let content):
+                            Text(content.body)
+                        case .location(let content):
+                            Text("location: \(content.body)")
+                        case .other(let msgtype, let body):
+                            Text("other (\(msgtype)): \(body)")
                         }
                     }
                 }
